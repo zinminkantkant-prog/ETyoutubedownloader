@@ -1,6 +1,6 @@
 import os
 import asyncio
-from pyrogram import Client, filters, idle
+from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import yt_dlp
 from aiohttp import web
@@ -14,7 +14,7 @@ app = Client("yt_downloader_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BO
 
 user_data = {}
 
-# --- Web Server for Keep Alive ---
+# --- Render Sleep မဝင်စေရန် Web Server ---
 async def handle_ping(request):
     return web.Response(text="Bot is running smoothly!")
 
@@ -107,7 +107,7 @@ async def callback_query(client, call):
             return filename, info.get('title', 'Video')
 
     try:
-        # Event Loop Mismatch မဖြစ်အောင် asyncio.to_thread သုံးထားပါသည်
+        # Download ဆွဲစဉ် Bot မဟန်းသွားစေရန် asyncio.to_thread သုံးထားပါသည်
         filename, title = await asyncio.to_thread(download)
 
         await status_msg.edit_text("⬆️ Uploading to Telegram...")
@@ -125,19 +125,9 @@ async def callback_query(client, call):
         await status_msg.edit_text(f"❌ An error occurred: {str(e)}")
 
 # --- Execution ---
-async def main():
-    await start_web_server()
-    await app.start()
-    print("Pyrogram Bot is running...")
-    await idle()
-    await app.stop()
-
 if __name__ == "__main__":
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(main())
-    except KeyboardInterrupt:
-        pass
-    finally:
-        loop.close()
+    # Event Loop တစ်ခုတည်းထဲတွင် Web Server နှင့် Pyrogram Bot တွဲဖက် Run ခြင်း
+    loop = asyncio.get_event_loop()
+    loop.create_task(start_web_server())
+    print("Pyrogram Bot is starting...")
+    app.run()
