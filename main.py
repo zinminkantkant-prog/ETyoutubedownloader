@@ -1,10 +1,31 @@
 import os
 import asyncio
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import yt_dlp
 
-# Render Environment Variables (.env) မှတစ်ဆင့် ခေါ်ယူခြင်း
+# --- Render Port Error ပြေလည်စေရန် Web Server ( Bot Code ကို လုံးဝ မထိခိုက်ပါ ) ---
+class SimpleHTTP(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running!")
+
+    def log_message(self, format, *args):
+        pass
+
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), SimpleHTTP)
+    server.serve_forever()
+
+# Background Thread အဖြစ် သီးသန့် Run ခြင်း
+threading.Thread(target=run_dummy_server, daemon=True).start()
+
+
+# --- သင့် မူရင်း CODE (၁၀၀% မူလအတိုင်း) ---
 API_ID = int(os.environ.get("API_ID", 2040))
 API_HASH = os.environ.get("API_HASH", "b18441a1ff607e10a989891a5462e627")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8963906075:AAFAZgLD205HJZEv5wD45sQ060xaDDKPkQo")
