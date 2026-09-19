@@ -1,34 +1,13 @@
 import os
 import asyncio
-import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import yt_dlp
 
-# --- Render Port / Sleep Mode မဝင်စေရန် Background Server ---
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is running smoothly!")
-
-    def log_message(self, format, *args):
-        pass # Console logs ရှုပ်မသွားစေရန် ပိတ်ထားပါသည်
-
-def run_health_check_server():
-    port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
-    server.serve_forever()
-
-# Background Thread သီးသန့်ဖြင့် Web Server ကို Run ခြင်း (Pyrogram Async Loop ကို လုံးဝ မထိခိုက်ပါ)
-threading.Thread(target=run_health_check_server, daemon=True).start()
-
-
-# --- သင့် မူရင်း Code (၁၀၀% မူလအတိုင်း) ---
-API_ID = int(os.environ.get("API_ID", "2040"))
+# Render Environment Variables (.env) မှတစ်ဆင့် ခေါ်ယူခြင်း
+API_ID = int(os.environ.get("API_ID", 2040))
 API_HASH = os.environ.get("API_HASH", "b18441a1ff607e10a989891a5462e627")
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8963906075:AAFAZgLD205HJZEv5wD45sQ060xaDDKPkQo")
 
 app = Client("yt_downloader_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
