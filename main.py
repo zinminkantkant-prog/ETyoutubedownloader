@@ -5,7 +5,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import yt_dlp
 from aiohttp import web
 
-# Environment Variables မှတစ်ဆင့် ခေါ်ယူခြင်း
+# Environment Variables
 API_ID = int(os.environ.get("API_ID", "2040"))
 API_HASH = os.environ.get("API_HASH", "")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
@@ -14,7 +14,7 @@ app = Client("yt_downloader_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BO
 
 user_data = {}
 
-# --- Render Sleep မဝင်စေရန် Web Server အသေး ထည့်သွင်းခြင်း ---
+# --- Web Server for Keep Alive ---
 async def handle_ping(request):
     return web.Response(text="Bot is running smoothly!")
 
@@ -96,20 +96,19 @@ async def callback_query(client, call):
             'merge_output_format': 'mp4',
         }
 
-    loop = asyncio.get_event_loop()
+    def download():
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info)
+            if call.data == "mp3":
+                filename = filename.rsplit('.', 1)[0] + '.mp3'
+            else:
+                filename = filename.rsplit('.', 1)[0] + '.mp4'
+            return filename, info.get('title', 'Video')
 
     try:
-        def download():
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                filename = ydl.prepare_filename(info)
-                if call.data == "mp3":
-                    filename = filename.rsplit('.', 1)[0] + '.mp3'
-                else:
-                    filename = filename.rsplit('.', 1)[0] + '.mp4'
-                return filename, info.get('title', 'Video')
-
-        filename, title = await loop.run_in_executor(None, download)
+        # Event Loop Mismatch မဖြစ်အောင် asyncio.to_thread သုံးထားပါသည်
+        filename, title = await asyncio.to_thread(download)
 
         await status_msg.edit_text("⬆️ Uploading to Telegram...")
 
@@ -125,7 +124,7 @@ async def callback_query(client, call):
     except Exception as e:
         await status_msg.edit_text(f"❌ An error occurred: {str(e)}")
 
-# --- Main Execution ---
+# --- Execution ---
 async def main():
     await start_web_server()
     await app.start()
@@ -134,4 +133,11 @@ async def main():
     await app.stop()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(main())
+    except KeyboardInterrupt:
+        pass
+    finally:
+        loop.close()
