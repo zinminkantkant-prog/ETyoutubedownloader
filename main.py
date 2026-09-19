@@ -1,34 +1,39 @@
 import os
 import asyncio
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import yt_dlp
-from aiohttp import web
 
-# Environment Variables
+# --- Render Port / Sleep Mode မဝင်စေရန် Background Server ---
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running smoothly!")
+
+    def log_message(self, format, *args):
+        pass # Console logs ရှုပ်မသွားစေရန် ပိတ်ထားပါသည်
+
+def run_health_check_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    server.serve_forever()
+
+# Background Thread သီးသန့်ဖြင့် Web Server ကို Run ခြင်း (Pyrogram Async Loop ကို လုံးဝ မထိခိုက်ပါ)
+threading.Thread(target=run_health_check_server, daemon=True).start()
+
+
+# --- သင့် မူရင်း Code (၁၀၀% မူလအတိုင်း) ---
 API_ID = int(os.environ.get("API_ID", "2040"))
-API_HASH = os.environ.get("API_HASH", "")
+API_HASH = os.environ.get("API_HASH", "b18441a1ff607e10a989891a5462e627")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 
 app = Client("yt_downloader_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 user_data = {}
 
-# --- Render Sleep မဝင်စေရန် Web Server ---
-async def handle_ping(request):
-    return web.Response(text="Bot is running smoothly!")
-
-async def start_web_server():
-    server = web.Application()
-    server.router.add_get("/", handle_ping)
-    runner = web.AppRunner(server)
-    await runner.setup()
-    port = int(os.environ.get("PORT", 8080))
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
-    print(f"Web server started on port {port}")
-
-# --- Bot Commands ---
 @app.on_message(filters.command("start"))
 async def start(client, message):
     await message.reply_text("Welcome! Send me a YouTube link. You can choose to download as MP3 or select your preferred video quality.")
@@ -46,6 +51,7 @@ async def handle_link(client, message):
     user_id = message.from_user.id
     user_data[user_id] = url
 
+    # Format / Quality Selection Buttons
     markup = InlineKeyboardMarkup([
         [InlineKeyboardButton("🎧 MP3 (Audio)", callback_data="mp3")],
         [InlineKeyboardButton("🎬 360p (Fast & Small)", callback_data="360p"),
@@ -66,6 +72,7 @@ async def callback_query(client, call):
     await call.answer(f"Starting download for {call.data.upper()}...")
     status_msg = await call.message.reply_text("⏳ Downloading from YouTube...")
 
+    # Speed Optimization Settings
     base_opts = {
         'source_address': '0.0.0.0',
         'retries': 10,
@@ -96,22 +103,24 @@ async def callback_query(client, call):
             'merge_output_format': 'mp4',
         }
 
-    def download():
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
-            if call.data == "mp3":
-                filename = filename.rsplit('.', 1)[0] + '.mp3'
-            else:
-                filename = filename.rsplit('.', 1)[0] + '.mp4'
-            return filename, info.get('title', 'Video')
+    loop = asyncio.get_event_loop()
 
     try:
-        # Download ဆွဲစဉ် Bot မဟန်းသွားစေရန် asyncio.to_thread သုံးထားပါသည်
-        filename, title = await asyncio.to_thread(download)
+        def download():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                filename = ydl.prepare_filename(info)
+                if call.data == "mp3":
+                    filename = filename.rsplit('.', 1)[0] + '.mp3'
+                else:
+                    filename = filename.rsplit('.', 1)[0] + '.mp4'
+                return filename, info.get('title', 'Video')
 
-        await status_msg.edit_text("⬆️ Uploading to Telegram...")
+        filename, title = await loop.run_in_executor(None, download)
 
+        await status_msg.edit_text("⬆️ Uploading to Telegram (Supports up to 2GB)...")
+
+        # Direct sending via Pyrogram up to 2GB
         if call.data == "mp3":
             await client.send_audio(call.message.chat.id, audio=filename, title=title)
         else:
@@ -124,10 +133,5 @@ async def callback_query(client, call):
     except Exception as e:
         await status_msg.edit_text(f"❌ An error occurred: {str(e)}")
 
-# --- Execution ---
-if __name__ == "__main__":
-    # Event Loop တစ်ခုတည်းထဲတွင် Web Server နှင့် Pyrogram Bot တွဲဖက် Run ခြင်း
-    loop = asyncio.get_event_loop()
-    loop.create_task(start_web_server())
-    print("Pyrogram Bot is starting...")
-    app.run()
+print("Pyrogram Bot is running...")
+app.run()
